@@ -40,7 +40,6 @@ HIDDEN = [
     'sqlite3', 'hashlib', 'secrets', 'getpass',
     'tkinter', 'tkinter.ttk', 'tkinter.messagebox',
     'tkinter.filedialog', '_tkinter',
-    'pkg_resources', 'pkg_resources.py2_warn',
     'email.mime.text', 'email.mime.multipart',
 ]
 
@@ -198,11 +197,15 @@ def construir(clave: str, mostrar_log: bool = False) -> bool:
                 color = '  !! ' if 'ERROR' in l or 'CRITICAL' in l else '  -- '
                 print(f"{color}{l.strip()}")
 
-        # Si falló, mostrar últimas 30 líneas para diagnóstico
+        # Si falló, mostrar últimas 50 líneas para diagnóstico
         if result.returncode != 0:
-            print("\n  [ULTIMAS LINEAS DEL LOG - para diagnóstico]")
-            for l in result.stdout.splitlines()[-30:]:
+            print("\n  [LOG COMPLETO - ultimas 50 lineas]")
+            for l in result.stdout.splitlines()[-50:]:
                 print(f"  {l}")
+            # También indicar dónde está el log completo
+            log_path = os.path.join(_ROOT, 'build_tmp', cfg['nombre'], 'warn-' + cfg['nombre'] + '.txt')
+            if os.path.exists(log_path):
+                print(f"\n  Log completo en: {log_path}")
 
     # En Windows genera .exe, en Linux/Mac sin extensión
     ext      = '.exe' if sys.platform == 'win32' else ''
