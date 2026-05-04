@@ -5,8 +5,15 @@ Genera, formatea y valida firmas digitales.
 
 import hashlib
 import string
-import random
+import os
+import sys
+import secrets
 from datetime import datetime
+
+# Fix de path: asegura que la raíz del proyecto esté en sys.path
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
 from modules.db import guardar_firma, verificar_firma
 
 
@@ -28,7 +35,9 @@ def generar_id_firma(usuario: str, fecha_hora: str, documento: str) -> str:
     
     Retorna un ID corto y único, ej: "A82K91LX"
     """
-    semilla = f"{usuario}|{fecha_hora}|{documento}"
+    # Nonce de 4 bytes para garantizar unicidad incluso en el mismo segundo
+    nonce = secrets.token_hex(4)
+    semilla = f"{usuario}|{fecha_hora}|{documento}|{nonce}"
     hash_completo = hashlib.sha256(semilla.encode('utf-8')).hexdigest()
 
     # Convertir hex a alfanumérico legible (letras y números)
