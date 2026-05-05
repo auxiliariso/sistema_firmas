@@ -11,6 +11,9 @@ from modules.firma  import crear_firma, formatear_firma_texto, validar_firma
 from modules.utils  import insertar_firma_excel, insertar_firma_word
 from modules.db     import obtener_firmas_usuario
 
+# ── Importar el buscador ──────────────────────────────────────────────
+from buscador import abrir_buscador
+
 
 # ─────────────────────────────────────────────
 # VENTANA PRINCIPAL
@@ -58,6 +61,18 @@ class AppFirmaDigital:
             font=("Segoe UI", 12, "bold"),
             fg="white", bg=self.COLOR_ACCENT
         ).pack(side="left", padx=20, pady=15)
+
+        # ── NUEVO: botón Buscar Firma en el encabezado ────────────────────────
+        tk.Button(
+            frame_header,
+            text="🔎 Buscar Firma",
+            font=("Segoe UI", 9),
+            bg="#2E6DA4", fg="white",
+            activebackground="#1A4F7A", activeforeground="white",
+            relief="flat", cursor="hand2",
+            command=self._abrir_buscador
+        ).pack(side="right", padx=16, pady=12, ipady=3, ipadx=8)
+        # ─────────────────────────────────────────────────────────────────────
 
         # Notebook con pestañas
         style = ttk.Style()
@@ -396,6 +411,14 @@ class AppFirmaDigital:
         firmas = obtener_firmas_usuario(self.usuario['usuario'])
         for f in firmas:
             self.tree.insert("", "end", values=(f['id_firma'], f['fecha_hora'], f['documento']))
+
+    # ──────────────────────────────────────────
+    # NUEVO: ABRIR BUSCADOR
+    # ──────────────────────────────────────────
+
+    def _abrir_buscador(self):
+        """Abre la ventana de búsqueda de firma en documentos."""
+        abrir_buscador(parent=self.root, firma_data=self.ultima_firma)
 
     # ──────────────────────────────────────────
     # ARRANQUE

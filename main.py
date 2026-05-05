@@ -26,8 +26,8 @@ from modules.app   import AppFirmaDigital
 
 USUARIOS_DEMO = [
     # (usuario,    contraseña,     nombre completo)
-    ("jperez",    "Firma2026!",   "Juan Pérez"),
-    ("mgarcia",   "Seguro#123",   "María García"),
+    ("jfUrrutia",    "C_ISO2026",   "Juan Francisco Ramirez Urrutia"),
+    ("Rgarnica",   "A_ISO2026",   "Roberto Enriquez Garnica"),
     ("admin",     "Admin@999",    "Administrador"),
 ]
 
