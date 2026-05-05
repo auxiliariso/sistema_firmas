@@ -6,6 +6,7 @@ e INSERTAR la firma con doble clic sobre el resultado.
 """
 
 import os
+import re
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
@@ -358,6 +359,38 @@ def _insertar_firma_word(ruta: str, n_linea_contenido: int, firma_data: dict) ->
 # VENTANA BUSCADOR
 # ─────────────────────────────────────────────
 
+
+# ─────────────────────────────────────────────
+# LECTURA ESTRUCTURADA PARA VISTA DE TABLA
+# ─────────────────────────────────────────────
+
+def _leer_excel_como_tabla(ruta: str) -> list:
+    """
+    Retorna lista de hojas, cada una con:
+      { "nombre": str, "filas": [[str,...]], "col_widths": [int,...] }
+    """
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(ruta, data_only=True)
+        hojas = []
+        for nombre_hoja in wb.sheetnames:
+            ws = wb[nombre_hoja]
+            filas = []
+            col_maxlen = {}
+            for idx_fila, fila in enumerate(ws.iter_rows(values_only=True), start=1):
+                celdas = [str(c) if c is not None else "" for c in fila]
+                filas.append((idx_fila, celdas))
+                for ci, v in enumerate(celdas):
+                    col_maxlen[ci] = max(col_maxlen.get(ci, 4), min(len(v), 30))
+            hojas.append({
+                "nombre":     nombre_hoja,
+                "filas":      filas,           # [(n_fila, [celdas...]), ...]
+                "col_widths": col_maxlen,
+            })
+        return hojas
+    except Exception:
+        return []
+
 class VentanaBuscador:
     COLOR_BG       = "#F0F4F8"
     COLOR_ACCENT   = "#1F3864"
@@ -510,16 +543,14 @@ class VentanaBuscador:
         frame_res = tk.Frame(parent, bg=self.COLOR_BG)
         frame_res.pack(fill="both", expand=True, pady=(4, 0))
 
-        cols2 = ("linea", "col", "contexto")
+        cols2 = ("fila_ref", "palabra")
         self.tree_resultados = ttk.Treeview(
             frame_res, columns=cols2, show="headings", height=10, selectmode="browse"
         )
-        self.tree_resultados.heading("linea",    text="Línea")
-        self.tree_resultados.heading("col",      text="Col")
-        self.tree_resultados.heading("contexto", text="Contexto")
-        self.tree_resultados.column("linea",    width=42,  anchor="center", stretch=False)
-        self.tree_resultados.column("col",      width=36,  anchor="center", stretch=False)
-        self.tree_resultados.column("contexto", width=190)
+        self.tree_resultados.heading("fila_ref", text="Ubicación")
+        self.tree_resultados.heading("palabra",  text="Palabra encontrada")
+        self.tree_resultados.column("fila_ref", width=80,  anchor="center", stretch=False)
+        self.tree_resultados.column("palabra",  width=190)
 
         sb_res = ttk.Scrollbar(frame_res, orient="vertical", command=self.tree_resultados.yview)
         self.tree_resultados.configure(yscrollcommand=sb_res.set)
@@ -539,6 +570,7 @@ class VentanaBuscador:
     # ──────────────────────────────────────────
 
     def _construir_panel_preview(self, parent):
+        # ── Encabezado del archivo ──────────────────────────────────────
         self.frame_info_archivo = tk.Frame(parent, bg="#DDE6F0", padx=10, pady=6)
         self.frame_info_archivo.pack(fill="x")
 
@@ -556,15 +588,18 @@ class VentanaBuscador:
         )
         self.label_info_ruta.pack(side="left", padx=(10, 0))
 
-        frame_text = tk.Frame(parent, bg=self.COLOR_BG)
-        frame_text.pack(fill="both", expand=True, pady=(6, 0))
+        # ── Contenedor principal del preview (apila Text y Tabla) ───────
+        self.frame_preview_contenedor = tk.Frame(parent, bg=self.COLOR_BG)
+        self.frame_preview_contenedor.pack(fill="both", expand=True, pady=(6, 0))
 
+        # ── Vista TEXTO (Word / TXT) ─────────────────────────────────────
+        self.frame_text_wrap = tk.Frame(self.frame_preview_contenedor, bg=self.COLOR_BG)
         self.text_preview = tk.Text(
-            frame_text, font=("Courier New", 9), bg="#FAFCFF",
+            self.frame_text_wrap, font=("Courier New", 9), bg="#FAFCFF",
             relief="flat", wrap="none", state="disabled", padx=8, pady=6
         )
-        sb_y = ttk.Scrollbar(frame_text, orient="vertical",   command=self.text_preview.yview)
-        sb_x = ttk.Scrollbar(frame_text, orient="horizontal", command=self.text_preview.xview)
+        sb_y = ttk.Scrollbar(self.frame_text_wrap, orient="vertical",   command=self.text_preview.yview)
+        sb_x = ttk.Scrollbar(self.frame_text_wrap, orient="horizontal", command=self.text_preview.xview)
         self.text_preview.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
         sb_y.pack(side="right",  fill="y")
         sb_x.pack(side="bottom", fill="x")
@@ -577,7 +612,20 @@ class VentanaBuscador:
         )
         self.text_preview.tag_configure("linea_activa", background="#FFFDE7")
 
-        # Leyenda + estado de inserción
+        # ── Vista TABLA (Excel) ──────────────────────────────────────────
+        self.frame_tabla_wrap = tk.Frame(self.frame_preview_contenedor, bg=self.COLOR_BG)
+
+        # Notebook de pestañas por hoja
+        self.nb_hojas = ttk.Notebook(self.frame_tabla_wrap)
+        self.nb_hojas.pack(fill="both", expand=True)
+
+        # Variable para rastrear las pestañas activas
+        self._tabs_excel: list = []
+
+        # Por defecto mostrar vista texto
+        self.frame_text_wrap.pack(fill="both", expand=True)
+
+        # ── Leyenda + estado ─────────────────────────────────────────────
         frame_leyenda = tk.Frame(parent, bg=self.COLOR_BG)
         frame_leyenda.pack(fill="x", pady=(4, 0))
 
@@ -586,7 +634,7 @@ class VentanaBuscador:
         tk.Label(frame_leyenda, text=" firma ",
                  font=("Courier New", 8, "bold"),
                  bg=self.COLOR_MARCA, fg=self.COLOR_MARCA_FG).pack(side="left")
-        tk.Label(frame_leyenda, text="  |  Fondo amarillo = línea seleccionada  |  ",
+        tk.Label(frame_leyenda, text="  |  Fondo amarillo = fila encontrada  |  ",
                  font=("Segoe UI", 8), bg=self.COLOR_BG, fg="#555").pack(side="left")
         tk.Label(frame_leyenda, text="doble clic en resultado → insertar firma",
                  font=("Segoe UI", 8, "italic"),
@@ -661,17 +709,134 @@ class VentanaBuscador:
         self.text_preview.config(state="normal")
         self.text_preview.delete("1.0", tk.END)
         self.text_preview.config(state="disabled")
+        self._ocultar_tabla_excel()
         self.label_info_tipo.config(
             text="Selecciona un archivo de la lista", fg=self.COLOR_ACCENT
         )
         self.label_info_ruta.config(text="")
 
+    def _ocultar_tabla_excel(self):
+        self.frame_tabla_wrap.pack_forget()
+        self.frame_text_wrap.pack(fill="both", expand=True)
+
+    def _mostrar_tabla_excel(self, ruta: str, palabra_busqueda: str = ""):
+        """Construye la vista de tabla con celdas reales para archivos Excel."""
+        # Limpiar pestañas anteriores
+        for tab in self.nb_hojas.tabs():
+            self.nb_hojas.forget(tab)
+        self._tabs_excel.clear()
+
+        hojas = _leer_excel_como_tabla(ruta)
+        if not hojas:
+            self._ocultar_tabla_excel()
+            return
+
+        self.frame_text_wrap.pack_forget()
+        self.frame_tabla_wrap.pack(fill="both", expand=True)
+
+        palabra_lower = palabra_busqueda.lower()
+
+        for hoja in hojas:
+            # Frame con canvas + scrollbar por hoja
+            frame_hoja = tk.Frame(self.nb_hojas, bg="#FAFCFF")
+            self.nb_hojas.add(frame_hoja, text=f"  {hoja['nombre']}  ")
+
+            canvas = tk.Canvas(frame_hoja, bg="#FAFCFF", highlightthickness=0)
+            sb_vy = ttk.Scrollbar(frame_hoja, orient="vertical",   command=canvas.yview)
+            sb_hx = ttk.Scrollbar(frame_hoja, orient="horizontal", command=canvas.xview)
+            canvas.configure(yscrollcommand=sb_vy.set, xscrollcommand=sb_hx.set)
+
+            sb_vy.pack(side="right",  fill="y")
+            sb_hx.pack(side="bottom", fill="x")
+            canvas.pack(fill="both", expand=True)
+
+            # Frame interior para las celdas
+            interior = tk.Frame(canvas, bg="#FAFCFF")
+            canvas_window = canvas.create_window((0, 0), window=interior, anchor="nw")
+
+            def _on_configure(event, cv=canvas):
+                cv.configure(scrollregion=cv.bbox("all"))
+            interior.bind("<Configure>", _on_configure)
+
+            # Calcular anchos de columna en píxeles
+            col_widths = hoja["col_widths"]
+            n_cols = max((len(f[1]) for f in hoja["filas"]), default=1)
+            px_widths = [max(col_widths.get(ci, 4) * 7, 50) for ci in range(n_cols)]
+
+            # Encabezado de columnas (A, B, C...)
+            from openpyxl.utils import get_column_letter
+            # Número de fila (esquina)
+            tk.Label(interior, text="", width=5,
+                     bg="#C5D5E8", fg="#1F3864",
+                     font=("Calibri", 8, "bold"),
+                     relief="groove", borderwidth=1
+                     ).grid(row=0, column=0, sticky="nsew", ipadx=2, ipady=2)
+
+            for ci in range(n_cols):
+                tk.Label(interior,
+                         text=get_column_letter(ci + 1),
+                         width=max(px_widths[ci] // 7, 6),
+                         bg="#C5D5E8", fg="#1F3864",
+                         font=("Calibri", 8, "bold"),
+                         relief="groove", borderwidth=1
+                         ).grid(row=0, column=ci + 1, sticky="nsew", ipadx=2, ipady=2)
+
+            # Filas de datos
+            for grid_row, (n_fila, celdas) in enumerate(hoja["filas"], start=1):
+                # Número de fila
+                tk.Label(interior, text=str(n_fila), width=5,
+                         bg="#DDE6F0", fg="#1F3864",
+                         font=("Calibri", 8),
+                         relief="groove", borderwidth=1
+                         ).grid(row=grid_row, column=0, sticky="nsew", ipadx=2, ipady=1)
+
+                # Celdas
+                for ci, valor in enumerate(celdas):
+                    # Resaltar si contiene la palabra buscada
+                    contiene = palabra_lower and palabra_lower in valor.lower()
+                    bg_color = self.COLOR_MARCA if contiene else "#FFFFFF"
+                    fg_color = self.COLOR_MARCA_FG if contiene else "#222222"
+                    fuente   = ("Calibri", 8, "bold") if contiene else ("Calibri", 8)
+
+                    tk.Label(interior,
+                             text=valor,
+                             width=max(px_widths[ci] // 7, 6),
+                             bg=bg_color, fg=fg_color,
+                             font=fuente,
+                             anchor="w",
+                             relief="groove", borderwidth=1
+                             ).grid(row=grid_row, column=ci + 1,
+                                    sticky="nsew", ipadx=3, ipady=1)
+
+            self._tabs_excel.append(frame_hoja)
+
+    def _resaltar_tabla_excel(self, palabra: str, n_fila_excel: int = None, nombre_hoja: str = None):
+        """Navega a la pestaña correcta y hace scroll a la fila con la firma."""
+        if not self._tabs_excel:
+            return
+        # Seleccionar la pestaña de la hoja correspondiente
+        if nombre_hoja:
+            for idx, tab_id in enumerate(self.nb_hojas.tabs()):
+                tab_text = self.nb_hojas.tab(tab_id, "text").strip()
+                if tab_text == nombre_hoja:
+                    self.nb_hojas.select(idx)
+                    break
+
     def _cargar_preview(self, ruta: str):
-        contenido = self.contenidos.get(ruta, "")
-        self.text_preview.config(state="normal")
-        self.text_preview.delete("1.0", tk.END)
-        self.text_preview.insert("1.0", contenido)
-        self.text_preview.config(state="disabled")
+        tipo = _detectar_tipo(ruta)
+        palabra = self.var_buscar.get().strip()
+
+        if tipo == TIPO_EXCEL:
+            # Vista tabla con celdas reales
+            self._mostrar_tabla_excel(ruta, palabra_busqueda=palabra)
+        else:
+            # Vista texto para Word / TXT
+            self._ocultar_tabla_excel()
+            contenido = self.contenidos.get(ruta, "")
+            self.text_preview.config(state="normal")
+            self.text_preview.delete("1.0", tk.END)
+            self.text_preview.insert("1.0", contenido)
+            self.text_preview.config(state="disabled")
 
     # ──────────────────────────────────────────
     # BÚSQUEDA
@@ -698,9 +863,25 @@ class VentanaBuscador:
 
             for r in resultados:
                 total += 1
+                # Extraer la palabra exacta del contexto
+                import re as _re
+                m = _re.search(re.escape(palabra), r["contexto"], _re.IGNORECASE)
+                palabra_hallada = m.group(0) if m else palabra
+
+                # Referencia de ubicación: Fila Excel o párrafo Word
+                raw = r.get("linea_raw", "")
+                m2 = _re.match(r"^\[F(\d+)\|", raw)
+                m3 = _re.match(r"^\[P(\d+)\]", raw)
+                if m2:
+                    fila_ref = f"Fila {m2.group(1)}"
+                elif m3:
+                    fila_ref = f"Párr. {m3.group(1)}"
+                else:
+                    fila_ref = f"Línea {r['linea']}"
+
                 iid = self.tree_resultados.insert(
                     "", "end",
-                    values=(r["linea"], r["columna"], r["contexto"]),
+                    values=(fila_ref, palabra_hallada),
                     tags=(ruta,)
                 )
                 # Guardar metadatos para la inserción posterior
@@ -760,19 +941,34 @@ class VentanaBuscador:
         if not vals or not tags:
             return
 
-        n_linea = vals[0]
-        ruta    = tags[0]
+        ruta = tags[0]
+        meta = self._resultado_meta.get(item, {})
 
+        # Asegurar que el archivo correcto esté seleccionado en el panel izquierdo
         if not self.tree_archivos.selection() or self.tree_archivos.selection()[0] != ruta:
             self.tree_archivos.selection_set(ruta)
             self._al_seleccionar_archivo()
 
-        linea_idx = f"{n_linea}.0"
-        self.text_preview.config(state="normal")
-        self.text_preview.tag_remove("linea_activa", "1.0", tk.END)
-        self.text_preview.tag_add("linea_activa", linea_idx, f"{n_linea}.end")
-        self.text_preview.see(linea_idx)
-        self.text_preview.config(state="disabled")
+        tipo = _detectar_tipo(ruta)
+
+        if tipo == TIPO_EXCEL:
+            # Navegar a la hoja correcta en la vista tabla
+            linea_raw = meta.get("linea_raw", "")
+            m = re.match(r"^\[F\d+\|(.+?)\]", linea_raw)
+            nombre_hoja = m.group(1) if m else None
+            self._resaltar_tabla_excel(
+                self.var_buscar.get().strip(),
+                nombre_hoja=nombre_hoja
+            )
+        else:
+            # Vista texto: resaltar línea activa
+            n_linea = meta.get("linea", 1)
+            linea_idx = f"{n_linea}.0"
+            self.text_preview.config(state="normal")
+            self.text_preview.tag_remove("linea_activa", "1.0", tk.END)
+            self.text_preview.tag_add("linea_activa", linea_idx, f"{n_linea}.end")
+            self.text_preview.see(linea_idx)
+            self.text_preview.config(state="disabled")
 
     # ──────────────────────────────────────────
     # DOBLE CLIC → INSERTAR FIRMA

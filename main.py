@@ -13,7 +13,7 @@ Para crear ejecutable .exe:
 import sys
 import os
 
-# Asegura que el directorio raíz esté en el path (importante para el .exe)
+# Asegura que el directorio raíz esté en el path ( esto es importante importante para el .exe)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from modules.db    import inicializar_db, crear_usuario
@@ -21,7 +21,7 @@ from modules.login import VentanaLogin
 from modules.app   import AppFirmaDigital
 
 # ─────────────────────────────────────────────
-# USUARIOS DE DEMOSTRACIÓN
+# db USUARIOS
 # ─────────────────────────────────────────────
 
 USUARIOS_DEMO = [
