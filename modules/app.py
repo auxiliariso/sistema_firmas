@@ -12,7 +12,7 @@ from modules.utils  import insertar_firma_excel, insertar_firma_word
 from modules.db     import obtener_firmas_usuario
 
 # ── Importar el buscador ──────────────────────────────────────────────
-from buscador import abrir_buscador
+from modules.buscador import abrir_buscador
 
 
 # ─────────────────────────────────────────────
