@@ -28,7 +28,8 @@ USUARIOS_DEMO = [
     # (usuario,    contraseña,     nombre completo)
     ("jfUrrutia",    "C_ISO2026",   "Juan Francisco Ramirez Urrutia"),
     ("Rgarnica",   "A_ISO2026",   "Roberto Enriquez Garnica"),
-    ("admin",     "Admin@999",    "Administrador"),
+    ("APaloma",     "Compra_2026",    "Ana Paloma"),
+    ("MMarquez", "Cont_2026", "Maru Marquez"),
 ]
 
 

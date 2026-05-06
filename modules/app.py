@@ -4,14 +4,18 @@ Se muestra tras el login exitoso. Permite firmar documentos y verificar firmas.
 """
 
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
-from modules.firma  import crear_firma, formatear_firma_texto, validar_firma
-from modules.utils  import insertar_firma_excel, insertar_firma_word
-from modules.db     import obtener_firmas_usuario
+# Fix de path: asegura que la raíz del proyecto esté en sys.path
+_ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
 
-# ── Importar el buscador ──────────────────────────────────────────────
+from modules.firma    import crear_firma, formatear_firma_texto, validar_firma
+from modules.utils    import insertar_firma_excel, insertar_firma_word
+from modules.db       import obtener_firmas_usuario
 from modules.buscador import abrir_buscador
 
 
@@ -62,7 +66,6 @@ class AppFirmaDigital:
             fg="white", bg=self.COLOR_ACCENT
         ).pack(side="left", padx=20, pady=15)
 
-        # ── NUEVO: botón Buscar Firma en el encabezado ────────────────────────
         tk.Button(
             frame_header,
             text="🔎 Buscar Firma",
@@ -72,7 +75,6 @@ class AppFirmaDigital:
             relief="flat", cursor="hand2",
             command=self._abrir_buscador
         ).pack(side="right", padx=16, pady=12, ipady=3, ipadx=8)
-        # ─────────────────────────────────────────────────────────────────────
 
         # Notebook con pestañas
         style = ttk.Style()
@@ -413,11 +415,11 @@ class AppFirmaDigital:
             self.tree.insert("", "end", values=(f['id_firma'], f['fecha_hora'], f['documento']))
 
     # ──────────────────────────────────────────
-    # NUEVO: ABRIR BUSCADOR
+    # BUSCADOR DE MARCADORES
     # ──────────────────────────────────────────
 
     def _abrir_buscador(self):
-        """Abre la ventana de búsqueda de firma en documentos."""
+        """Abre la ventana de búsqueda y reemplazo de marcadores de firma."""
         abrir_buscador(parent=self.root, firma_data=self.ultima_firma)
 
     # ──────────────────────────────────────────
